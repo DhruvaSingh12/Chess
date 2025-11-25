@@ -511,21 +511,73 @@ public class GamePanel extends JPanel implements Runnable {
     }
 
     private boolean isStalemate() {
-
-        int count = 0;
-        // count no.of pieces
-        for (Piece piece : simPieces) {
-            if (piece.color != currentColor) {
-                count++;
-            }
+        // If the king is in check, it's not stalemate (it might be checkmate)
+        if (isKingInCheckGeneral()) {
+            return false;
         }
 
-        if (count == 1) {
-            if (kingCanMove(getKing(false)) == false) {
-                return true;
+        // Check if any piece of the current color has a valid move
+        // We need to iterate over all pieces of the current color
+        // and check if they can move to any square on the board legally.
+        
+        // Work with a copy to avoid modifying the game state during simulation
+        ArrayList<Piece> testPieces = new ArrayList<>();
+        copyPieces(simPieces, testPieces);
+        
+        // Temporarily set simPieces to testPieces so canMove works correctly
+        ArrayList<Piece> originalSimPieces = new ArrayList<>();
+        copyPieces(simPieces, originalSimPieces);
+        copyPieces(testPieces, simPieces);
+
+        boolean canMove = false;
+
+        for (Piece piece : testPieces) {
+            if (piece.color == currentColor) {
+                // Try every square on the board
+                for (int row = 0; row < 8; row++) {
+                    for (int col = 0; col < 8; col++) {
+                        
+                        // Check if the piece can physically move to this square
+                        if (piece.canMove(col, row)) {
+                            
+                            // Simulate the move to check legality (does it leave king in check?)
+                            int originalCol = piece.col;
+                            int originalRow = piece.row;
+                            Piece capturedPiece = piece.hittingP; // hittingP is set by canMove
+                            
+                            // Apply move
+                            piece.col = col;
+                            piece.row = row;
+                            if (capturedPiece != null) {
+                                simPieces.remove(capturedPiece);
+                            }
+                            
+                            // Check if king is in check
+                            if (!isKingInCheckGeneral()) {
+                                canMove = true; // Found a valid move!
+                            }
+                            
+                            // Undo move
+                            piece.col = originalCol;
+                            piece.row = originalRow;
+                            if (capturedPiece != null) {
+                                simPieces.add(capturedPiece);
+                            }
+                            
+                            if (canMove) break;
+                        }
+                    }
+                    if (canMove) break;
+                }
             }
+            if (canMove) break;
         }
-        return false;
+        
+        // Restore original simPieces
+        copyPieces(originalSimPieces, simPieces);
+
+        // If no piece can move, it is stalemate
+        return !canMove;
     }
 
     private void checkCastling() {
