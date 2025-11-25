@@ -1,0 +1,1 @@
+ & 'C:\Users\LOQ\.vscode\extensions\redhat.java-1.49.0-win32-x64\jre\21.0.9-win32-x86_64\bin\javac.exe' -d bin -sourcepath src -cp res src/main/*.java src/piece/*.java; & 'C:\Users\LOQ\.vscode\extensions\redhat.java-1.49.0-win32-x64\jre\21.0.9-win32-x86_64\bin\java.exe' -cp 'bin;res' main.Main

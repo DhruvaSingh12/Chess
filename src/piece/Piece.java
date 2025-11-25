@@ -144,7 +144,7 @@ public class Piece {
 		}
 		
 		//when piece is moving right
-		for(int c=preCol-1; c>targetCol; c--) {
+		for(int c=preCol+1; c<targetCol; c++) {
 			for(Piece piece:GamePanel.simPieces) {
 				if(piece.col==c && piece.row==targetRow) {
 					hittingP=piece;

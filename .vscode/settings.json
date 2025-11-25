@@ -1,0 +1,15 @@
+{
+    "java.configuration.runtimes": [
+        {
+            "name": "JavaSE-25",
+            "path": "C:\\Program Files\\Eclipse Adoptium\\jdk-25.0.1.8-hotspot",
+            "default": true
+        }
+    ],
+    "java.project.sourcePaths": [
+        "src",
+        "res"
+    ],
+    "java.project.outputPath": "bin",
+    "java.compile.nullAnalysis.mode": "automatic"
+}
