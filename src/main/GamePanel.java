@@ -1,12 +1,9 @@
 package main;
 
-import java.awt.AlphaComposite;
 import java.awt.Color;
 import java.awt.Dimension;
-import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
-import java.awt.RenderingHints;
 import java.util.ArrayList;
 
 import javax.swing.JPanel;
@@ -21,7 +18,7 @@ import piece.Queen;
 import piece.Rook;
 
 public class GamePanel extends JPanel implements Runnable {
-    public static final int WIDTH = 930;
+    public static final int WIDTH = 1250;
     public static final int HEIGHT = 680;
     final int FPS = 30;
     Thread gameThread;
@@ -35,6 +32,19 @@ public class GamePanel extends JPanel implements Runnable {
     Piece activeP, checkingP;
     public static Piece castlingP;
     ArrayList<Piece> capturedPieces = new ArrayList<>();
+
+    // Move History
+    GameHistory gameHistory;
+
+    // Counters for FEN
+    int halfMoveClock = 0;
+    int fullMoveNumber = 1;
+    
+    // Drawer
+    GameDrawer gameDrawer;
+
+    // Temp vars for notation
+    int tempPreCol, tempPreRow;
 
     // Color
     public static final int WHITE = 0;
@@ -56,6 +66,9 @@ public class GamePanel extends JPanel implements Runnable {
 
         setPieces();
         copyPieces(pieces, simPieces);
+        
+        gameHistory = new GameHistory(this);
+        gameDrawer = new GameDrawer(this);
     }
 
     public void launchGame() {
@@ -158,11 +171,23 @@ public class GamePanel extends JPanel implements Runnable {
                 if (activeP != null) {
                     if (validSquare) {
                         // Move confirmed, update piece list if a piece has been captured
+                        boolean capture = activeP.hittingP != null;
+                        boolean pawnMove = activeP.type == Type.PAWN;
+                        
+                        tempPreCol = activeP.preCol;
+                        tempPreRow = activeP.preRow;
+
                         if(activeP.hittingP != null) {
                             capturedPieces.add(activeP.hittingP);
                         }
                         copyPieces(simPieces, pieces);
                         activeP.updatePosition();
+                        
+                        if(capture || pawnMove) {
+                            halfMoveClock = 0;
+                        } else {
+                            halfMoveClock++;
+                        }
 
                         if (castlingP != null) {
                             castlingP.updatePosition();
@@ -171,14 +196,24 @@ public class GamePanel extends JPanel implements Runnable {
                         if (canPromote()) {
                             promotion = true;
                         } else {
+                            String moveNotation = gameHistory.getNotation(activeP, activeP.col, activeP.row, tempPreCol, tempPreRow, capture, castlingP != null);
+                            
                             changePlayer();
                             // Sync simPieces with pieces before checking checkmate
                             copyPieces(pieces, simPieces);
                             // After changing player, check if the new current player is in
                             // checkmate/stalemate
-                            if (isKingInCheckGeneral() && isCheckmate()) {
-                                gameover = true;
-                            } else if (isStalemate() && isKingInCheckGeneral() == false) {
+                            if (isKingInCheckGeneral()) {
+                                if (isCheckmate()) {
+                                    gameover = true;
+                                    moveNotation += "#";
+                                } else {
+                                    moveNotation += "+";
+                                }
+                            }
+                            gameHistory.addMove(moveNotation);
+                            
+                            if (isStalemate() && isKingInCheckGeneral() == false) {
                                 stalemate = true;
                             }
                         }
@@ -236,7 +271,7 @@ public class GamePanel extends JPanel implements Runnable {
         }
     }
 
-    private boolean isIllegal(Piece king) {
+    boolean isIllegal(Piece king) {
 
         if (king.type == Type.KING) {
             for (Piece piece : simPieces) {
@@ -260,7 +295,7 @@ public class GamePanel extends JPanel implements Runnable {
         return false;
     }
 
-    private boolean opponentCanCaptureKing() {
+    boolean opponentCanCaptureKing() {
 
         Piece king = getKing(false);
 
@@ -604,6 +639,7 @@ public class GamePanel extends JPanel implements Runnable {
 
         } else {
             currentColor = WHITE;
+            fullMoveNumber++;
 
             // Reset white's two-stepped status
             for (Piece piece : pieces) {
@@ -633,18 +669,24 @@ public class GamePanel extends JPanel implements Runnable {
         if (mouse.pressed) {
             for (Piece piece : promoPieces) {
                 if (piece.col == mouse.x / Board.SQUARE_SIZE && piece.row == mouse.y / Board.SQUARE_SIZE) {
+                    
+                    String moveNotation = gameHistory.getNotation(activeP, activeP.col, activeP.row, tempPreCol, tempPreRow, activeP.hittingP != null, false);
                     switch (piece.type) {
                         case ROOK:
                             simPieces.add(new Rook(currentColor, activeP.col, activeP.row));
+                            moveNotation += "=R";
                             break;
                         case KNIGHT:
                             simPieces.add(new Knight(currentColor, activeP.col, activeP.row));
+                            moveNotation += "=N";
                             break;
                         case BISHOP:
                             simPieces.add(new Bishop(currentColor, activeP.col, activeP.row));
+                            moveNotation += "=B";
                             break;
                         case QUEEN:
                             simPieces.add(new Queen(currentColor, activeP.col, activeP.row));
+                            moveNotation += "=Q";
                             break;
                         default:
                             break;
@@ -655,65 +697,18 @@ public class GamePanel extends JPanel implements Runnable {
                     activeP = null;
                     promotion = false;
                     changePlayer();
+                    
+                    // Check check/mate after promotion
+                    if (isKingInCheckGeneral()) {
+                        if (isCheckmate()) {
+                            gameover = true;
+                            moveNotation += "#";
+                        } else {
+                            moveNotation += "+";
+                        }
+                    }
+                    gameHistory.addMove(moveNotation);
                 }
-            }
-        }
-    }
-
-    private void drawCapturedPieces(Graphics2D g2) {
-        int[] whitePieceCounts = new int[5]; // Captured White pieces (by Black)
-        int[] blackPieceCounts = new int[5]; // Captured Black pieces (by White)
-        Piece[] whiteImages = new Piece[5];
-        Piece[] blackImages = new Piece[5];
-
-        for (Piece p : capturedPieces) {
-            int index = -1;
-            switch (p.type) {
-                case PAWN: index = 0; break;
-                case KNIGHT: index = 1; break;
-                case BISHOP: index = 2; break;
-                case ROOK: index = 3; break;
-                case QUEEN: index = 4; break;
-                default: break;
-            }
-            
-            if (index != -1) {
-                if (p.color == WHITE) {
-                    whitePieceCounts[index]++;
-                    if (whiteImages[index] == null) whiteImages[index] = p;
-                } else {
-                    blackPieceCounts[index]++;
-                    if (blackImages[index] == null) blackImages[index] = p;
-                }
-            }
-        }
-
-        // Draw captured White pieces (on Black's side - Top Right)
-        int x = 700;
-        int y = 30;
-        int size = 35;
-        int spacing = 45;
-        
-        g2.setFont(new Font("Arial", Font.PLAIN, 15));
-        g2.setColor(Color.white);
-
-        for (int i = 0; i < 5; i++) {
-            if (whitePieceCounts[i] > 0) {
-                g2.drawImage(whiteImages[i].image, x, y, size, size, null);
-                g2.drawString("x" + whitePieceCounts[i], x + size/2 + 5, y + size + 15);
-                x += spacing;
-            }
-        }
-
-        // Draw captured Black pieces (on White's side - Bottom Right)
-        x = 700;
-        y = 600;
-        
-        for (int i = 0; i < 5; i++) {
-            if (blackPieceCounts[i] > 0) {
-                g2.drawImage(blackImages[i].image, x, y, size, size, null);
-                g2.drawString("x" + blackPieceCounts[i], x + size/2 + 5, y + size + 15);
-                x += spacing;
             }
         }
     }
@@ -722,94 +717,7 @@ public class GamePanel extends JPanel implements Runnable {
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
         Graphics2D g2 = (Graphics2D) g;
-
-        // Draw board
-        board.draw(g2);
-
-        // Draw pieces
-        for (Piece p : simPieces) {
-            p.draw(g2);
-        }
         
-        drawCapturedPieces(g2);
-
-        if (stalemate) {
-            g2.setFont(new Font("Arial", Font.PLAIN, 90));
-            g2.setColor(Color.gray);
-            g2.drawString("Stalemate!", 150, 340);
-        }
-
-        if (activeP != null) {
-            if (canMove) {
-
-                if (isIllegal(activeP) || opponentCanCaptureKing()) {
-                    g2.setColor(Color.yellow);
-                    g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.5f));
-                    g2.fillRect(activeP.col * Board.SQUARE_SIZE, activeP.row * Board.SQUARE_SIZE, Board.SQUARE_SIZE,
-                            Board.SQUARE_SIZE);
-                    g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1f));
-                }
-
-                else {
-                    g2.setColor(Color.gray);
-                    g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.5f));
-                    g2.fillRect(activeP.col * Board.SQUARE_SIZE, activeP.row * Board.SQUARE_SIZE, Board.SQUARE_SIZE,
-                            Board.SQUARE_SIZE);
-                    g2.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1f));
-                }
-            }
-
-            // Draw active piece at the end so it's not hidden by the board
-            activeP.draw(g2);
-        }
-
-        // status messages
-        g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-        g2.setFont(new Font("Book Antiqua", Font.PLAIN, 25));
-        g2.setColor(Color.white);
-
-        if (promotion) {
-            g2.drawString("Promote to:", 700, 150);
-            for (Piece piece : promoPieces) {
-                g2.drawImage(piece.image, piece.getX(piece.col), piece.getY(piece.row), Board.SQUARE_SIZE,
-                        Board.SQUARE_SIZE, null);
-            }
-        }
-
-        else {
-            if (currentColor == WHITE) {
-                g2.drawString("White's turn.", 700, 450);
-                if (checkingP != null && checkingP.color == BLACK && !gameover) {
-                    g2.setColor(Color.red);
-                    g2.drawString("Check!", 700, 530);
-                } else if (gameover) {
-                    String s = "";
-                    if (currentColor == WHITE) {
-                        s = "Black Wins by Checkmate";
-                    } else {
-                        s = "White Wins by Checkmate";
-                    }
-                    g2.setFont(new Font("Arial", Font.PLAIN, 60));
-                    g2.setColor(Color.green);
-                    g2.drawString(s, 50, 340);
-                }
-            } else {
-                g2.drawString("Black's turn.", 700, 200);
-                if (checkingP != null && checkingP.color == WHITE && !gameover) {
-                    g2.setColor(Color.red);
-                    g2.drawString("Check!", 700, 140);
-                } else if (gameover) {
-                    String s = "";
-                    if (currentColor == WHITE) {
-                        s = "Black Wins by Checkmate";
-                    } else {
-                        s = "White Wins by Checkmate";
-                    }
-                    g2.setFont(new Font("Arial", Font.PLAIN, 60));
-                    g2.setColor(Color.green);
-                    g2.drawString(s, 50, 340);
-                }
-            }
-        }
+        gameDrawer.draw(g2);
     }
 }
