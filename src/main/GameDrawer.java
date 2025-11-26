@@ -32,6 +32,11 @@ public class GameDrawer {
             g2.setColor(Color.gray);
             g2.drawString("Stalemate!", 150, 340);
         }
+        else if (gp.insufficientMaterial) {
+            g2.setFont(new Font("Arial", Font.PLAIN, 90));
+            g2.setColor(Color.gray);
+            g2.drawString("Draw!", 250, 340);
+        }
 
         if (gp.activeP != null) {
             if (gp.canMove) {

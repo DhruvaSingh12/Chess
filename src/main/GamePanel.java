@@ -57,6 +57,7 @@ public class GamePanel extends JPanel implements Runnable {
     boolean promotion;
     boolean gameover;
     boolean stalemate;
+    boolean insufficientMaterial;
 
     public GamePanel() {
         setPreferredSize(new Dimension(WIDTH, HEIGHT));
@@ -148,7 +149,7 @@ public class GamePanel extends JPanel implements Runnable {
             promoting();
         }
 
-        else if (gameover == false && stalemate == false) {
+        else if (gameover == false && stalemate == false && insufficientMaterial == false) {
             // Mouse pressed
             if (mouse.pressed) {
                 if (activeP == null) {
@@ -215,6 +216,9 @@ public class GamePanel extends JPanel implements Runnable {
                             
                             if (isStalemate() && isKingInCheckGeneral() == false) {
                                 stalemate = true;
+                            }
+                            else if(isInsufficientMaterial()) {
+                                insufficientMaterial = true;
                             }
                         }
 
@@ -719,5 +723,25 @@ public class GamePanel extends JPanel implements Runnable {
         Graphics2D g2 = (Graphics2D) g;
         
         gameDrawer.draw(g2);
+    }
+
+    private boolean isInsufficientMaterial() {
+        int whiteMinors = 0;
+        int blackMinors = 0;
+        
+        for (Piece p : simPieces) {
+            if (p.type == Type.PAWN || p.type == Type.ROOK || p.type == Type.QUEEN) {
+                return false;
+            }
+            if (p.type == Type.KNIGHT || p.type == Type.BISHOP) {
+                if (p.color == WHITE) {
+                    whiteMinors++;
+                } else {
+                    blackMinors++;
+                }
+            }
+        }
+        
+        return whiteMinors <= 1 && blackMinors <= 1;
     }
 }
